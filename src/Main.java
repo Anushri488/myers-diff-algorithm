@@ -64,6 +64,54 @@ public class Main {
 
         return lines.toArray(new Line[0]);
     }
+        /*
+     * ------------------------------------------------------------
+     * Give every distinct line a number
+     * ------------------------------------------------------------
+     *
+     * Two lines get the same number exactly when their bytes are
+     * equal. Myers then compares ints instead of byte arrays.
+     *
+     * ISO_8859_1 maps each byte to one char, so the String key
+     * keeps the exact bytes, even when they are not valid UTF-8.
+     */
+    static int[][] toIds(Line[] oldLines, Line[] newLines) {
+
+        HashMap<String, Integer> idOf = new HashMap<>();
+
+        int[] oldIds = new int[oldLines.length];
+        int[] newIds = new int[newLines.length];
+
+        for (int i = 0; i < oldLines.length; i++) {
+            oldIds[i] = idFor(idOf, oldLines[i]);
+        }
+
+        for (int i = 0; i < newLines.length; i++) {
+            newIds[i] = idFor(idOf, newLines[i]);
+        }
+
+        return new int[][] {oldIds, newIds};
+    }
+
+    static int idFor(HashMap<String, Integer> idOf, Line line) {
+
+        String key = new String(
+                line.data,
+                line.start,
+                line.length(),
+                StandardCharsets.ISO_8859_1
+        );
+
+        Integer id = idOf.get(key);
+
+        if (id == null) {
+            id = idOf.size();
+            idOf.put(key, id);
+        }
+
+        return id;
+    }
+
 
     /*
      * Temporary main: only checks that both files can be read.

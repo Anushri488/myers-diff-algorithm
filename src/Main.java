@@ -426,10 +426,78 @@ public class Main {
         output.write(line.data, line.start, line.length());
         output.write('\n');
     }
+        /*
+     * ------------------------------------------------------------
+     * Part B: changed character ranges of one line pair
+     * ------------------------------------------------------------
+     *
+     * Returns for example "12-13 | 11-12".
+     */
+    static String characterRanges(Line oldLine, Line newLine) {
+
+        /*
+         * Decode as UTF-8, then work on code points so an emoji
+         * counts as ONE character. A '\r' stays and counts as one.
+         */
+        int[] oldCodePoints = new String(
+                oldLine.data, oldLine.start, oldLine.length(), StandardCharsets.UTF_8
+        ).codePoints().toArray();
+
+        int[] newCodePoints = new String(
+                newLine.data, newLine.start, newLine.length(), StandardCharsets.UTF_8
+        ).codePoints().toArray();
+
+        MyersDiff diff = new MyersDiff(oldCodePoints, newCodePoints);
+
+        return buildRanges(diff.deleted) + " | " + buildRanges(diff.inserted);
+    }
 
     /*
      * ------------------------------------------------------------
-     * Print the diff (Part A)
+     * Turn changed positions into merged half-open ranges
+     * ------------------------------------------------------------
+     *
+     * changed = F T T T F F T  ->  "1-4,6-7"
+     * nothing changed          ->  "."
+     */
+    static String buildRanges(boolean[] changed) {
+
+        StringBuilder result = new StringBuilder();
+
+        int i = 0;
+
+        while (i < changed.length) {
+
+            if (!changed[i]) {
+                i++;
+                continue;
+            }
+
+            int start = i;
+
+            while (i < changed.length && changed[i]) {
+                i++;
+            }
+
+            if (result.length() > 0) {
+                result.append(',');
+            }
+
+            result.append(start).append('-').append(i);
+        }
+
+        if (result.length() == 0) {
+            return ".";
+        }
+
+        return result.toString();
+    }
+
+
+    
+        /*
+     * ------------------------------------------------------------
+     * Print the diff (Part A, plus '?' lines for Part B)
      * ------------------------------------------------------------
      *
      * Walk through both files together. A position that is neither
@@ -441,6 +509,7 @@ public class Main {
             Line[] oldLines,
             Line[] newLines,
             MyersDiff diff,
+            boolean highlight,
             OutputStream output) throws IOException {
 
         int i = 0;
@@ -479,11 +548,32 @@ public class Main {
                 writeLine(output, oldLines[del], (byte) '-');
             }
 
-            for (int ins = insertStart; ins < j; ins++) {
-                writeLine(output, newLines[ins], (byte) '+');
+            int deleteCount = i - deleteStart;
+
+            for (int pair = 0; insertStart + pair < j; pair++) {
+
+                Line newLine = newLines[insertStart + pair];
+
+                writeLine(output, newLine, (byte) '+');
+
+                /*
+                 * Part B: the pair-th '+' is paired with the
+                 * pair-th '-'. Its '?' line comes right after it.
+                 */
+                if (highlight && pair < deleteCount) {
+
+                    Line oldLine = oldLines[deleteStart + pair];
+
+                    output.write('?');
+                    output.write(' ');
+                    output.write(characterRanges(oldLine, newLine)
+                            .getBytes(StandardCharsets.UTF_8));
+                    output.write('\n');
+                }
             }
         }
     }
+
 
 
 
@@ -501,6 +591,8 @@ public class Main {
             System.err.println("usage: Main lines|highlight A_PATH B_PATH");
             System.exit(2);
         }
+        String command = args[0];
+
 
         String oldFileName = args[1];
         String newFileName = args[2];
@@ -528,7 +620,8 @@ public class Main {
         try {
             OutputStream output = new BufferedOutputStream(System.out, 1 << 16);
 
-            printDiff(oldLines, newLines, diff, output);
+                        printDiff(oldLines, newLines, diff, command.equals("highlight"), output);
+
 
             output.flush();
         } catch (IOException exception) {

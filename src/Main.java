@@ -416,27 +416,125 @@ public class Main {
             return false;
         }
     }
-
+        /*
+     * ------------------------------------------------------------
+     * Write one raw line: prefix, the exact bytes, '\n'
+     * ------------------------------------------------------------
+     */
+    static void writeLine(OutputStream output, Line line, byte prefix) throws IOException {
+        output.write(prefix);
+        output.write(line.data, line.start, line.length());
+        output.write('\n');
+    }
 
     /*
-     * Temporary main: only checks that both files can be read.
+     * ------------------------------------------------------------
+     * Print the diff (Part A)
+     * ------------------------------------------------------------
+     *
+     * Walk through both files together. A position that is neither
+     * deleted nor inserted is a keep line. Otherwise we are in a
+     * change block: print all its '-' lines, then all its '+' lines
+     * (delete-first rule).
+     */
+    static void printDiff(
+            Line[] oldLines,
+            Line[] newLines,
+            MyersDiff diff,
+            OutputStream output) throws IOException {
+
+        int i = 0;
+        int j = 0;
+
+        while (i < oldLines.length || j < newLines.length) {
+
+            boolean oldChanged = i < oldLines.length && diff.deleted[i];
+            boolean newChanged = j < newLines.length && diff.inserted[j];
+
+            if (!oldChanged && !newChanged) {
+
+                /*
+                 * Keep line.
+                 */
+                writeLine(output, oldLines[i], (byte) ' ');
+                i++;
+                j++;
+                continue;
+            }
+
+            /*
+             * One change block.
+             */
+            int deleteStart = i;
+            while (i < oldLines.length && diff.deleted[i]) {
+                i++;
+            }
+
+            int insertStart = j;
+            while (j < newLines.length && diff.inserted[j]) {
+                j++;
+            }
+
+            for (int del = deleteStart; del < i; del++) {
+                writeLine(output, oldLines[del], (byte) '-');
+            }
+
+            for (int ins = insertStart; ins < j; ins++) {
+                writeLine(output, newLines[ins], (byte) '+');
+            }
+        }
+    }
+
+
+
+        /*
+     * ------------------------------------------------------------
+     * Main
+     * ------------------------------------------------------------
      */
     public static void main(String[] args) {
 
-        if (args.length != 3) {
+        boolean known = args.length == 3
+                && (args[0].equals("lines") || args[0].equals("highlight"));
+
+        if (!known) {
             System.err.println("usage: Main lines|highlight A_PATH B_PATH");
             System.exit(2);
         }
 
-        try {
-            Line[] oldLines = readLines(args[1]);
-            Line[] newLines = readLines(args[2]);
+        String oldFileName = args[1];
+        String newFileName = args[2];
 
-            System.err.println("old: " + oldLines.length + " lines, new: "
-                    + newLines.length + " lines");
+        Line[] oldLines;
+        Line[] newLines;
+
+        try {
+            oldLines = readLines(oldFileName);
+            newLines = readLines(newFileName);
         } catch (IOException exception) {
+
+            /*
+             * Nothing on stdout, message on stderr, exit code 2.
+             */
             System.err.println("error: cannot read file: " + exception.getMessage());
             System.exit(2);
+            return;
+        }
+
+        int[][] ids = toIds(oldLines, newLines);
+
+        MyersDiff diff = new MyersDiff(ids[0], ids[1]);
+
+        try {
+            OutputStream output = new BufferedOutputStream(System.out, 1 << 16);
+
+            printDiff(oldLines, newLines, diff, output);
+
+            output.flush();
+        } catch (IOException exception) {
+            System.err.println("error: cannot write output: " + exception.getMessage());
+            System.exit(1);
         }
     }
 }
+
